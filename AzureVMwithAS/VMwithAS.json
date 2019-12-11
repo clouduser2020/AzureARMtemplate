@@ -1,0 +1,139 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "webserverName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "webserverAdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "webserverAdminPassword": {
+      "type": "securestring"
+    },
+    "webserverWindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2012-R2-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    },
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "rgorchproddiag"
+    },
+    "storageAccountResourceGroup": {
+      "type": "string",
+      "defaultValue": "RG-ORCH-PROD"
+    },
+    "virtualNetworkName": {
+      "type": "string",
+      "defaultValue": "vnet-orch-eus-prd"
+    },
+    "virtualNetworkResourceGroup": {
+      "type": "string",
+      "defaultValue": "RG-ORCH-PROD"
+    },
+    "webas1Name": {
+      "type": "string",
+      "minLength": 1
+    }},
+  "variables": {
+    "webserverImagePublisher": "MicrosoftWindowsServer",
+    "webserverImageOffer": "WindowsServer",
+    "webserverOSDiskName": "webserverOSDisk",
+    "webserverVmSize": "Standard_D2_v2",
+    "webserverVnetID": "[resourceId(parameters('virtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
+    "webserverSubnetRef": "[concat(variables('webserverVnetID'), '/subnets/', 'snet-web-prd')]",
+    "webserverStorageAccountContainerName": "vhds",
+    "webserverNicName": "[concat(parameters('webserverName'), 'NetworkInterface')]"},
+  "resources": [
+    {
+      "name": "[variables('webserverNicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "eastus",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "webserverNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('webserverSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('webserverName')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "eastus",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('webserverNicName'))]"
+      ],
+      "tags": {
+        "displayName": "webserver"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('webserverVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('webserverName')]",
+          "adminUsername": "[parameters('webserverAdminUsername')]",
+          "adminPassword": "[parameters('webserverAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('webserverImagePublisher')]",
+            "offer": "[variables('webserverImageOffer')]",
+            "sku": "[parameters('webserverWindowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "webserverOSDisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId(parameters('storageAccountResourceGroup'), 'Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2016-01-01').primaryEndpoints.blob, variables('webserverStorageAccountContainerName'), '/', variables('webserverOSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('webserverNicName'))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "[parameters('webas1Name')]",
+      "type": "Microsoft.Compute/availabilitySets",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "webas"
+      },
+      "properties": {
+        "platformUpdateDomainCount": 1,
+        "platformFaultDomainCount": 1
+      }
+    }],
+  "outputs": {}
+}

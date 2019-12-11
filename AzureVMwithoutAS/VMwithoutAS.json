@@ -1,0 +1,151 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "AppserverName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "AppserverAdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "AppserverAdminPassword": {
+      "type": "securestring"
+    },
+    "AppserverWindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2012-R2-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    },
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "rgorchproddiag"
+    },
+    "storageAccountResourceGroup": {
+      "type": "string",
+      "defaultValue": "RG-ORCH-PROD"
+    }},
+  "variables": {
+    "vnet-orch-eus-prd1Prefix": "10.0.0.0/16",
+    "vnet-orch-eus-prd1Subnet1Name": "Subnet-1",
+    "vnet-orch-eus-prd1Subnet1Prefix": "10.0.0.0/24",
+    "vnet-orch-eus-prd1Subnet2Name": "Subnet-2",
+    "vnet-orch-eus-prd1Subnet2Prefix": "10.0.1.0/24",
+    "AppserverImagePublisher": "MicrosoftWindowsServer",
+    "AppserverImageOffer": "WindowsServer",
+    "AppserverOSDiskName": "AppserverOSDisk",
+    "AppserverVmSize": "Standard_D2_v2",
+    "AppserverVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-orch-eus-prd1')]",
+    "AppserverSubnetRef": "[concat(variables('AppserverVnetID'), '/subnets/', variables('vnet-orch-eus-prd1Subnet1Name'))]",
+    "AppserverStorageAccountContainerName": "vhds",
+    "AppserverNicName": "[concat(parameters('AppserverName'), 'NetworkInterface')]"},
+  "resources": [
+    {
+      "name": "vnet-orch-eus-prd1",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "vnet-orch-eus-prd1"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('vnet-orch-eus-prd1Prefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('vnet-orch-eus-prd1Subnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('vnet-orch-eus-prd1Subnet1Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('vnet-orch-eus-prd1Subnet2Name')]",
+            "properties": {
+              "addressPrefix": "[variables('vnet-orch-eus-prd1Subnet2Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('AppserverNicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'vnet-orch-eus-prd1')]"
+      ],
+      "tags": {
+        "displayName": "AppserverNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('AppserverSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('AppserverName')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "eastus",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('AppserverNicName'))]"
+      ],
+      "tags": {
+        "displayName": "Appserver"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('AppserverVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('AppserverName')]",
+          "adminUsername": "[parameters('AppserverAdminUsername')]",
+          "adminPassword": "[parameters('AppserverAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('AppserverImagePublisher')]",
+            "offer": "[variables('AppserverImageOffer')]",
+            "sku": "[parameters('AppserverWindowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "AppserverOSDisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId(parameters('storageAccountResourceGroup'), 'Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2016-01-01').primaryEndpoints.blob, variables('AppserverStorageAccountContainerName'), '/', variables('AppserverOSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('AppserverNicName'))]"
+            }
+          ]
+        }
+      }
+    }],
+  "outputs": {}
+}
